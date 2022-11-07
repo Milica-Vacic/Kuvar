@@ -1,0 +1,544 @@
+{"GET":"let id = param('id')
+let link ='http://108m122.e2.mars-hosting.com/api/images/'
+if (!Number.isInteger(parseInt(id))){
+write('res', 'err')
+write('msg', 'Invalid id')
+exit()
+}
+
+let qb=db.select(`r.*,usr_fullname,concat('[',group_concat(DISTINCT'\"','${link}',ir.img_id,'\"'),']') as img_links, concat('[',group_concat(DISTINCT ir.img_id),']') as img_ids, itp_name as itp_name, avg(rat_value) as rating,
+
+( SELECT CONCAT('[',GROUP_CONCAT('\"',rct_name,'\"'),']') FROM recipes r 
+LEFT JOIN recipe_category_recipes cr ON cr.rec_id = r.rec_id
+LEFT JOIN recipe_categories c ON c.rct_id=cr.rct_id  WHERE rct_type='course' and cr.rec_id=${id}) AS course,
+
+( SELECT CONCAT('[',GROUP_CONCAT('\"',rct_name,'\"'),']') FROM recipes r 
+LEFT JOIN recipe_category_recipes cr ON cr.rec_id = r.rec_id
+LEFT JOIN recipe_categories c ON c.rct_id=cr.rct_id  WHERE rct_type='meal-type' and cr.rec_id=${id}) AS meal_type,
+
+( SELECT CONCAT('[',GROUP_CONCAT('\"',rct_name,'\"'),']') FROM recipes r 
+LEFT JOIN recipe_category_recipes cr ON cr.rec_id = r.rec_id
+LEFT JOIN recipe_categories c ON c.rct_id=cr.rct_id  WHERE rct_type='diet' and cr.rec_id=${id}) AS diets,
+
+( SELECT CONCAT('[',GROUP_CONCAT('\"',rct_name,'\"'),']') FROM recipes r 
+LEFT JOIN recipe_category_recipes cr ON cr.rec_id = r.rec_id
+LEFT JOIN recipe_categories c ON c.rct_id=cr.rct_id  WHERE rct_type='country' and cr.rec_id=${id}) AS country,
+
+null AS steps,
+null as ingredients,
+null as calories
+`).from('recipes r')
+.leftJoin('images_recipes ir','r.rec_id=ir.rec_id')
+.innerJoin('ingredient_types it','it.itp_id=r.itp_id')
+.leftJoin('ratings rat', 'rat.rec_id=r.rec_id')
+.innerJoin('users us','us.usr_id=r.usr_id')
+.where('r.rec_id',id)
+.groupBy('rec_id')
+let sql = qb.toSql()
+let res
+try{
+    res=db.query(sql)
+}
+catch(e)
+{
+write('res', 'err')
+write('msg', 'SQL error')
+write('err', e)
+exit()
+}
+
+if (res.rows===0){
+write('res', 'err')
+write('msg', 'Recipe not found')
+exit()
+}
+
+
+let ing
+let qbIng = db.select(`ing_name, rci_amount, uni_name, CONCAT('${link}', i.img_id) AS img_link, ing_g_per_ml,
+(ing_calories*rci_amount*uni_to_base*(SELECT IF(ing_g_per_ml IS NULL,1,ing_g_per_ml))/100) AS calories,
+(rci_amount*uni_to_base*(SELECT IF(ing_g_per_ml IS NULL,1,ing_g_per_ml))) AS grams,
+( SELECT CONCAT('[',GROUP_CONCAT('[\"',uni_name,'\",\"',uni_to_base,'\"]'),']') FROM units
+WHERE uni_type=(SELECT IF ((select ing_g_per_ml from ingredients ii where ii.ing_id=i.ing_id) IS NULL,'mass',uni_type))) AS units`)
+.from('ingredients i')
+    .innerJoin('recipes_ingredients ri','i.ing_id=ri.ing_id')
+    .innerJoin('recipes r','r.rec_id=ri.rec_id')
+    .leftJoin('units u','u.uni_id=ri.uni_id')
+    .where('r.rec_id',id)
+
+let sqlIng = qbIng.toSql()
+try{
+    ing=db.query(sqlIng)
+}
+catch(e){
+    write('res','err')
+    write('msg', 'SQL error');
+    exit();
+}
+for (let row of ing){
+    row.units=JSON.parse(row.units)
+}
+
+let calSum=0
+let gSum=0
+for (let row of ing) {
+    calSum+=row.calories
+    gSum+=row.grams
+}
+let cal_100 = calSum/gSum*100
+
+
+
+let step
+let qbStep = db.select(`ste_number, ste_description`)
+.from('steps')
+.where('rec_id',id)
+.orderBy('ste_number ASC')
+
+let sqlStep = qbStep.toSql()
+try{
+    step=db.query(sqlStep)
+}
+catch(e){
+    write('res','err')
+    write('msg', 'SQL error');
+    exit();
+}
+
+
+for (let row of res) {
+    row.img_links=JSON.parse(row.img_links)
+    row.course = JSON.parse(row.course)
+    row.meal_type = JSON.parse(row.meal_type)
+    row.diets = JSON.parse(row.diets)
+    row.country = JSON.parse(row.country)
+    row.img_ids = JSON.parse(row.img_ids)
+    row.ingredients=ing
+    row.steps=step
+    row.calories=cal_100
+}
+
+
+write('res', 'ok')
+write('data', res)
+","PATCH":"let userId = session('id')
+util.adminCheck(userId)
+let id = param('id')
+if (!Number.isInteger(parseInt(id))){
+write('res', 'err')
+write('msg', 'Invalid id')
+exit()
+}
+
+let name = param('name',null)
+let time = param('time',null)
+let ing_type = param ('ing_type',null)
+let img_ids = param('img_ids',null) //niz id-eva za brisanje
+let img_files = param('img_files',null)//niz fajlova
+let meal_type = param('meal_type',null)
+let course = param('course',null)
+let diets = param ('diets',null) //niz stringova
+let country = param ('country',null)
+let steps=param('steps',null) //niz objekata sa description i number
+let ingredients = param('ingredients',null) //niz objekata sa name, amount i unit
+ingredients = JSON.parse(ingredients)
+steps = JSON.parse(steps)
+diets = JSON.parse(diets)
+img_ids = JSON.parse(img_ids)
+util.allNull([name, time, ing_type, img_ids, img_files, meal_type, course, diets, country, steps, ingredients])
+if (name==='') {
+    write('result','err')
+    write('message', 'Name cannot be empty');
+    exit();
+}
+if (time==='') {
+    write('res','err')
+    write('msg', 'Time cannot be empty')
+    exit()
+}
+
+
+if(!util.allNullChk([name,time,ing_type]))
+{
+    let qbRecipe = db.update('recipes').where('rec_id',id)
+    let res
+
+    if (name!==null){
+        let sqlNameCheck = 'SELECT * FROM recipes WHERE rec_name=?'
+        res = db.query(sqlNameCheck,name)
+
+        if (res.rows>0 && res[0].rec_id!=id) {
+            write('res','err')
+            write('msg', 'Name already taken');
+            exit();
+        }
+        qbRecipe.set('rec_name',name)
+    }
+
+    if (time!==null){
+        if (!Number.isInteger(parseInt(time))){
+        write('res', 'err')
+        write('msg', 'Invalid time parameter')
+        exit()
+        }
+        qbRecipe.set('rec_preptime',time)
+    }
+
+    if (ing_type!==null){
+        let qbIngType = db.select(`itp_id`).from('ingredient_types').where('itp_name',ing_type)
+        let ing_type_id
+        try{
+            ing_type_id = db.query(qbIngType.toSql())[0].itp_id
+        }
+        catch(e){
+            write('res', 'err');
+            write('msg', 'Ingredient type not found')
+            write('err', e);
+            exit();
+        }
+        qbRecipe.set('itp_id',ing_type_id)
+        }
+
+    try{
+        db.query(qbRecipe.toSql())
+    }
+    catch(e){
+        write('res','err')
+        write('msg', 'SQL error')
+        write('err', e)
+        exit()
+    }
+}
+if (img_ids!==null && img_ids.length>0) {
+    let sqlDelLink = `DELETE FROM images_recipes WHERE img_id=?`
+    let sqlDelImg = `DELETE FROM images WHERE img_id=?`
+
+    for (let id of img_ids){
+        try{
+            db.query(sqlDelLink,id)
+            db.query(sqlDelImg,id)
+        }
+        catch(e){
+            write('res','err')
+            write('msg', 'SQL error')
+            write('err', e)
+            exit()
+        }
+    }
+}
+if (img_files!==null){
+    let sqlInsert = `INSERT INTO images (img_data) VALUES (?)`
+    let sqlLink = `INSERT INTO images_recipes (rec_id,img_id) VALUES (?,?)`
+    let imgId
+    if(img_files.length > 1){
+        for (let img of img_files){
+            if (img.size>400000){
+                write('res', 'err');
+                write('msg', 'Image too big')
+                exit();
+            }
+            try{
+                imgId=db.query(sqlInsert,img.data)[0].id
+                db.query(sqlLink,id,imgId)
+            }
+            catch(e){
+                write('res','err')
+                write('msg', 'SQL error')
+                write('err', e)
+                exit()
+            }
+        }
+    }else{
+        try{
+            imgId=db.query(sqlInsert,img_files.data)[0].id
+            db.query(sqlLink,id,imgId)
+        }
+        catch(e){
+            write('res','err')
+            write('msg', 'SQL error')
+            write('err', e)
+            exit()
+        }
+    }
+    
+
+}
+
+
+
+if (meal_type!==null){
+    let sqlDel = `DELETE rc FROM recipe_category_recipes rc JOIN recipe_categories c ON c.rct_id=rc.rct_id
+        WHERE rc.rec_id=${id} AND c.rct_type='meal-type'`
+    let sqlGet = db.select(`rct_id`).from('recipe_categories').where('rct_name',meal_type).toSql()
+    let sqlInsert =`INSERT INTO recipe_category_recipes (rec_id,rct_id) VALUES (?,?)`
+    let meal_type_id
+    try{
+        db.query(sqlDel)
+        meal_type_id = db.query(sqlGet)[0].rct_id
+        db.query(sqlInsert,id,meal_type_id)
+    }
+    catch(e){
+        write('res', 'err');
+        write('msg', 'SQL error5')
+        write('err', e);
+        exit();
+    }
+
+}
+
+if (course!==null){
+    let sqlDel = `DELETE rc FROM recipe_category_recipes rc JOIN recipe_categories c ON c.rct_id=rc.rct_id
+        WHERE rc.rec_id=${id} AND c.rct_type='course'`
+    let sqlGet = db.select(`rct_id`).from('recipe_categories').where('rct_name',course).toSql()
+    let sqlInsert =`INSERT INTO recipe_category_recipes (rec_id,rct_id) VALUES (?,?)`
+    let course_id
+    try{
+        db.query(sqlDel)
+        course_id = db.query(sqlGet)[0].rct_id
+        db.query(sqlInsert,id,course_id)
+    }
+    catch(e){
+        write('res', 'err');
+        write('msg', 'SQL error6')
+        write('err', e);
+        exit();
+    }
+
+}
+
+if (diets!==null && diets.length>0){
+    let sqlDel = `DELETE rc FROM recipe_category_recipes rc JOIN recipe_categories c ON c.rct_id=rc.rct_id
+        WHERE rc.rec_id=${id} AND c.rct_type='diet'`
+    try{
+        db.query(sqlDel)
+    }
+    catch(e){
+        write('res', 'err');
+        write('msg', 'SQL error7')
+        write('err', e);
+        exit();
+    }
+    if (diets[0]!=='empty'){
+        let sqlGet = db.select(`rct_id`).from('recipe_categories').where('rct_name',diets).toSql()
+        let sqlInsert =`INSERT INTO recipe_category_recipes (rec_id,rct_id) VALUES (?,?)`
+        let diet_ids=[]
+        try{
+            diet_ids = db.query(sqlGet)
+        }
+        catch(e){
+            write('res', 'err');
+            write('msg', 'SQL error7')
+            write('err', e);
+            exit();
+        }
+        for (let row of diet_ids){
+            try{
+            db.query(sqlInsert,id,row.rct_id)
+            }
+            catch(e){
+                write('res', 'err');
+                write('msg', 'SQL error8')
+                write('err', e);
+                exit();
+            }
+
+        }
+    }
+    
+
+}
+
+if (country!==null){
+    let sqlDel = `DELETE rc FROM recipe_category_recipes rc JOIN recipe_categories c ON c.rct_id=rc.rct_id
+        WHERE rc.rec_id=${id} AND c.rct_type='country'`
+    let sqlGet = db.select(`rct_id`).from('recipe_categories').where('rct_name',country).toSql()
+    let sqlInsert =`INSERT INTO recipe_category_recipes (rec_id,rct_id) VALUES (?,?)`
+    let country_id
+    try{
+        db.query(sqlDel)
+        country_id = db.query(sqlGet)[0].rct_id
+        db.query(sqlInsert,id,country_id)
+    }
+    catch(e){
+        write('res', 'err');
+        write('msg', 'SQL error9')
+        write('err', e);
+        exit();
+    }
+
+}
+
+if (steps!==null && steps.length>0){
+    let sqlDel = `DELETE FROM steps WHERE rec_id=${id}`
+    let sqlInsert =`INSERT INTO steps (ste_description, ste_number, rec_id) VALUES (?,?,?)`
+    try{
+        db.query(sqlDel)
+    }
+    catch(e){
+        write('res', 'err');
+        write('msg', 'SQL error10')
+        write('err', e);
+        exit();
+    }
+    for (let step of steps){
+        try{
+            db.query(sqlInsert,step.description,step.number,id)
+        }
+        catch(e){
+            write('res', 'err');
+            write('msg', 'SQL error11')
+            write('err', e);
+            exit();
+        }
+
+    }
+}
+
+
+
+if (ingredients!==null && ingredients.length>0){
+    let sqlDel=`DELETE FROM recipes_ingredients WHERE rec_id=${id}`
+    try{
+        db.query(sqlDel)
+    }
+    catch(e){
+        write('res', 'err');
+        write('msg', 'SQL error12')
+        write('err', e);
+        exit();
+    }
+    for (let i=0;i<ingredients.length;i++){
+        let qbIng = db.select(`ing_id`).from('ingredients').where('ing_name',ingredients[i].name)
+        let qbUni = db.select(`uni_id`).from('units').where('uni_name',ingredients[i].unit)
+        let ing_id
+        let uni_id
+        try{
+            ing_id=db.query(qbIng.toSql())[0].ing_id
+            uni_id=db.query(qbUni.toSql())[0].uni_id
+        }
+        catch(e){
+            write('res', 'err')
+            write('msg', 'Check your ingredients')
+            write('err', e)
+            exit();
+        }
+
+        let sqlIng=db.insert('recipes_ingredients').set('rec_id',id).set('ing_id',ing_id)
+        .set('rci_amount',ingredients[i].amount).set('uni_id',uni_id).toSql()
+            try{
+                db.query(sqlIng)
+            }
+            catch(e){
+                write('res', 'err')
+                write('msg', 'SQL error14')
+                write('err', e)
+                exit();
+            }
+    }
+}
+
+
+write('res','ok')
+
+","DELETE":"let userId = session('id')
+util.adminCheck(userId)
+let id = param('id')
+if (!Number.isInteger(parseInt(id))){
+write('res', 'err')
+write('msg', 'Invalid id')
+exit()
+}
+
+let idsSql = `SELECT img_id from images_recipes where rec_id=${id}`
+let imgs
+try{
+    imgs=db.query(idsSql)
+}
+catch(e){
+    write('res','err')
+    write('msg', 'SQL error')
+    write('err',e)
+    exit()
+}
+
+
+
+let qbGetRep = db.select(`rc.com_id, rep.rep_id`).from('reports rep')
+.innerJoin('reports_comments rc','rc.rep_id=rep.rep_id')
+.innerJoin('comments c','c.com_id=rc.com_id')
+.where('c.rec_id',id)
+
+let res = db.query(qbGetRep.toSql())
+
+for (let row of res){
+  let sqlDelRC = db.delete('reports_comments').where('com_id',row.com_id).toSql()
+  let sqlDelR = db.delete('reports').where('rep_id',row.rep_id).toSql()
+  try{
+    db.query(sqlDelRC)
+    db.query(sqlDelR)
+  }
+  catch(e){
+    write('res','err')
+    write('msg','SQL error')
+    write('err', e);
+    exit() 
+  }
+}
+
+
+
+
+let qbGetRecRep = db.select(`rep.rep_id`).from('reports rep')
+.innerJoin('reports_recipes rr','rr.rep_id=rep.rep_id')
+.where('rr.rec_id',id)
+
+res = db.query(qbGetRecRep.toSql())
+write(res)
+write('sql',qbGetRecRep.toSql())
+
+for (let row of res){
+  let sqlDelRR = db.delete('reports_recipes').where('rep_id',row.rep_id).toSql()
+  let sqlDelR = db.delete('reports').where('rep_id',row.rep_id).toSql()
+  try{
+    db.query(sqlDelRR)
+    db.query(sqlDelR)
+  }
+  catch(e){
+    write('res','err')
+    write('msg','SQL error')
+    write('err', e);
+    exit() 
+  }
+}
+
+
+
+let sqlDelKeys = `DELETE s,ri,ir,rc,rat,com FROM steps s
+LEFT JOIN recipes_ingredients ri ON s.rec_id=ri.rec_id
+LEFT JOIN images_recipes ir ON s.rec_id=ir.rec_id
+LEFT JOIN recipe_category_recipes rc ON rc.rec_id=s.rec_id
+LEFT JOIN ratings rat ON rat.rec_id=s.rec_id
+LEFT JOIN comments com ON com.rec_id=s.rec_id
+WHERE s.rec_id=${id}`
+let sqlDelRec = `DELETE FROM recipes WHERE rec_id=${id}`
+let sqlDelImg = `DELETE FROM images WHERE img_id=?`
+let check
+try{
+    check = db.query(sqlDelKeys)
+    db.query(sqlDelRec)
+    for (let img of imgs)
+        db.query(sqlDelImg,img.img_id)
+}
+catch(e){
+    write('res','err')
+    write('msg', 'SQL error')
+    write('err',e)
+    exit()
+}
+if (check[0].count===0){
+write('res', 'err')
+write('msg', 'Recipe not found')
+exit()
+}
+
+write('res','ok')","META":{"language":"JavaScript","methods":{"GET":{"contentType":"","parameters":[],"desc":""}}}}

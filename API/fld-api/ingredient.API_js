@@ -1,0 +1,121 @@
+{"GET":"let filter= param('filter',null)
+let ids =param('ids',null)
+let link = 'http://108m122.e2.mars-hosting.com/api/images/'
+let limit = param('limit',null)
+ids = JSON.parse(ids)
+let res
+
+
+    let sqlGetIng = db.select(`ing_id, ing_name, ing_calories, ing_g_per_ml, CONCAT('${link}', img_id) AS img_link, null as units`)
+    .from(`ingredients`).orderBy(`ing_name ASC`)
+    if (filter!==null)
+        sqlGetIng.where(`ing_name LIKE CONCAT('%','${filter}', '%')`)
+    if (ids!==null)
+        sqlGetIng.where(`ing_id`,ids)
+    sqlGetIng=sqlGetIng.toSql()
+
+
+    if (limit!==null){
+        sqlGetIng+=` LIMIT ${limit}`
+    }
+    try{
+        res=db.query(sqlGetIng)
+    }
+    catch(e){
+        write('res','err')
+        write('msg', 'SQL error');
+        exit();
+    }
+    if (res.rows===0){
+        write('res','err')
+        write('msg', 'Ingredient not found');
+        exit();
+    }
+
+for(let row of res){
+    let ing_id = row.ing_id
+    let qbUnits = db.select(`concat('[',group_concat('\"',uni_name,'\"'),']') as name`).from('units')
+    let sqlIng = db.select('ing_g_per_ml').from('ingredients').where('ing_id',ing_id).where('ing_g_per_ml IS NOT NULL').toSql()
+    let density
+    try{
+        density=db.query(sqlIng)
+    }
+    catch(e){
+    write('res', 'err')
+    write('msg', 'Ingredient not found');
+    exit();
+    }
+    if (density.rows===0) qbUnits.where('uni_type','mass')
+
+    let units
+    try{
+        units=db.query(qbUnits.toSql())[0].name
+    }
+    catch(e){
+        write('res', 'err')
+        write('msg', 'SQL error');
+        exit()
+    }
+    row.units=JSON.parse(units)
+}
+
+write('res','ok')
+write('data',res)
+","POST":"let userId = session('id')
+let name = param('name',util.requiredParam)
+let cal = param('cal',util.requiredParam)
+let density = param('density',null)
+let img = param('img',null)
+let img_id = null
+if (!parseFloat(density)) density=null
+
+
+util.adminCheck(userId)
+
+let sqlNameCheck = 'SELECT * FROM ingredients WHERE ing_name=?'
+let res = db.query(sqlNameCheck,name)
+
+ if (res.rows>0) {
+    write('res','err')
+     write('msg', 'Ingredient already exists');
+     exit();
+ }
+
+if (img!==null){
+    if (img.size>400000){
+            write('res', 'err');
+            write('msg', 'Image too big')
+            exit();
+        }
+    let sqlAdd='INSERT INTO images (img_data) VALUES (?)'
+try{
+    img_id=db.query(sqlAdd,img.data)[0].id;
+}
+catch(e){
+    write('res', 'err');
+    write('msg', 'SQL error2')
+    exit();
+}
+}
+
+let params = {
+    name:name,
+    cal:cal,
+    density:density,
+    img_id:img_id
+}
+
+
+
+
+let sqlPostIng = 'INSERT INTO ingredients (ing_name,ing_calories,ing_g_per_ml,img_id) VALUES (:name,:cal,:density,:img_id)'
+try{
+    db.query(sqlPostIng,params)
+}
+catch(e){
+    write('res','err')
+    write('err', e)
+    write('msg', 'SQL error');
+    exit();
+}
+write('res','ok')","META":{"language":"JavaScript"}}

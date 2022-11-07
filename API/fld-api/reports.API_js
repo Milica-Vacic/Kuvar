@@ -1,0 +1,174 @@
+{"GET":"let res;
+let qbGetRep;
+let link ='http://108m122.e2.mars-hosting.com/api/images/'
+let filter=param('filter',null) //string vrednosti com ili rec
+
+if (filter==='com'){
+    qbGetRep = db.select(`rep.rep_id, rep_msg, c.com_id,r.rec_id, rep.usr_id AS reportAuthorID, u.usr_fullname AS reportAuthor,
+        u.usr_banned AS repAuthorBanned, uu.usr_banned AS comAuthorBanned,
+        com.usr_id AS commentAuthorID, uu.usr_fullname AS commentAuthor, com_content , 
+        concat('${link}', img.img_id) AS commentAuthorImg, concat('${link}', imgRepAut.img_id) AS reportAuthorImg`).from('reports rep')
+        .leftJoin('reports_comments c','c.rep_id=rep.rep_id')
+        .leftJoin('reports_recipes r','r.rep_id=rep.rep_id')
+        .leftJoin('users u','rep.usr_id = u.usr_id')
+        .leftJoin('comments com','c.com_id = com.com_id')
+        .leftJoin('users uu','com.usr_id = uu.usr_id')
+        .leftJoin('images img','img.img_id = uu.img_id')
+        .leftJoin('images imgRepAut','imgRepAut.img_id = u.img_id')
+        .where('c.com_id','is not',null)
+    res = db.query(qbGetRep.toSql())
+    if (res.rows===0){
+        write('res','err')
+        write('msg','No reports found')
+        exit()
+    }
+    write('res','ok')
+    write('data',res)
+}
+if (filter==='rec'){
+    qbGetRep = db.select(`rep.rep_id, r.rec_id, rec.rec_name, rep.usr_id AS reportAuthorID, u.usr_fullname AS reportAuthor,
+        u.usr_banned AS repAuthorBanned, uu.usr_banned AS recAuthorBanned, uu.usr_id as recipeAuthorID,
+        concat('${link}', ir.img_id) AS image_link, concat('${link}', imgRepAut.img_id) AS reportAuthorImg,
+        concat('${link}', img.img_id) AS recipeAuthorImg, uu.usr_fullname as recipeAuthor`).from('reports rep')
+        .leftJoin('reports_recipes r','r.rep_id=rep.rep_id')
+        .leftJoin('recipes rec','r.rec_id=rec.rec_id')
+        .leftJoin('users u','rep.usr_id = u.usr_id')
+        .leftJoin('images_recipes ir','ir.rec_id = rec.rec_id')
+        .leftJoin('images imgRepAut','imgRepAut.img_id = u.img_id')
+        .leftJoin('users uu','rec.usr_id=uu.usr_id')
+        .leftJoin('images img','img.img_id = uu.img_id')
+        .where('r.rec_id','is not',null)
+        .groupBy('rep_id')
+    res = db.query(qbGetRep.toSql())
+    if (res.rows===0){
+        write('res','err')
+        write('msg','No reports found')
+        exit()
+    }
+    write('res','ok')
+    write('data',res)
+}
+
+
+
+","POST":"let userId=session('id')
+util.userCheck(userId)
+let recId = param('rec_id',null)
+let comId = param('com_id',null)
+let msg= param('msg',null)
+util.allNull[recId,comId]
+
+let res
+let sqlInsRep = db.insert('reports').set('rep_msg',msg).set('usr_id',userId).toSql()
+let repId
+
+if(comId!==null){
+        let comCheck = db.select('com_id').from('comments').where('com_id',comId).toSql()
+        try{
+        res=db.query(comCheck)
+        }
+        catch(e){
+            write('res','err')
+            write('msg','SQL error')
+            write('err',e)
+            exit()
+        }
+        if (res.rows===0){
+            write('res','err')
+            write('msg','Comment not found')
+            exit()
+        }
+
+
+        let repCheck = db.select(`rep.*,c.com_id,r.rec_id`).from('reports rep')
+        .leftJoin('reports_comments c','c.rep_id=rep.rep_id')
+        .leftJoin('reports_recipes r','r.rep_id=rep.rep_id')
+        .where('com_id',comId).where('rep.usr_id',userId).toSql()
+        try{
+        res=db.query(repCheck)
+        }
+        catch(e){
+            write('res','err')
+            write('msg','SQL error')
+            write('err',e)
+            exit()
+        }
+        if (res.rows>0){
+            write('res','err')
+            write('msg','You have already reported this comment')
+            exit()
+        }
+
+
+        try{
+            repId=db.query(sqlInsRep)[0].id
+            }
+        catch(e){
+            write('res','err')
+            write('msg','SQL error')
+            write('err',e)
+            exit()
+        }
+
+
+
+        let sqlLink = db.insert('reports_comments').set('rep_id',repId).set('com_id',comId).toSql()
+        try{
+            db.query(sqlLink)
+            }
+        catch(e){
+            write('res','err')
+            write('msg','SQL error')
+            write('err',e)
+            exit()
+        }
+
+        write('res','ok')
+        exit()
+}
+
+util.findRecipe
+
+
+let repCheck = db.select(`rep.*,c.com_id,r.rec_id`).from('reports rep')
+    .leftJoin('reports_comments c','c.rep_id=rep.rep_id')
+    .leftJoin('reports_recipes r','r.rep_id=rep.rep_id')
+    .where('rec_id',recId).where('rep.usr_id',userId).toSql()
+try{
+res=db.query(repCheck)
+}
+catch(e){
+    write('res','err')
+    write('msg','SQL error')
+    write('err',e)
+    exit()
+}
+if (res.rows>0){
+    write('res','err')
+    write('msg','You have already reported this recipe')
+    exit()
+}
+
+
+try{
+    repId=db.query(sqlInsRep)[0].id
+    }
+catch(e){
+    write('res','err')
+    write('msg','SQL error')
+    write('err',e)
+    exit()
+}
+
+let sqlLink = db.insert('reports_recipes').set('rep_id',repId).set('rec_id',recId).toSql()
+try{
+    db.query(sqlLink)
+    }
+catch(e){
+    write('res','err')
+    write('msg','SQL error')
+    write('err',e)
+    exit()
+}
+
+write('res','ok')","META":{"language":"JavaScript"}}

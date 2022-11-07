@@ -1,0 +1,83 @@
+{"PATCH":"let userId = session('id')
+util.adminCheck(userId)
+let id = param('id')
+
+if (!Number.isInteger(parseInt(id))){
+write('res', 'err')
+write('msg', 'Invalid id')
+exit()
+}
+
+let name=param('name',null)
+let type=param('type',null)
+
+if (name===\"\"){
+    write('res','err')
+    write('msg', 'Name cannot be empty');
+    exit(); 
+}
+
+if (type==='ingredient-type'){
+    let sqlCheck = 'SELECT itp_name FROM ingredient_types WHERE itp_id=?'
+    let res = db.query(sqlCheck,id)
+
+    if (res.rows===0) {
+        write('res','err')
+        write('msg', 'Ingredient type not found');
+        exit();
+    }
+
+    util.allNull([name,type])
+
+    let sqlUpdate = db.update('ingredient_types').where('itp_id',id)
+    if (name) sqlUpdate.set('itp_name',name)
+
+    sqlUpdate=sqlUpdate.toSql()
+
+    try{
+        db.query(sqlUpdate)
+    }
+    catch(e){
+        write('res','err')
+        write('msg', 'Sql error');
+        write('err',e)
+        exit();
+    }
+
+    write('res','ok')
+    exit();
+
+}
+
+
+
+let sqlCheck = 'SELECT rct_name FROM recipe_categories WHERE rct_id=?'
+let res = db.query(sqlCheck,id)
+
+if (res.rows===0) {
+    write('res','err')
+    write('msg', 'Category not found');
+    exit();
+}
+
+util.allNull([name,type])
+
+let sqlUpdate = db.update('recipe_categories').where('rct_id',id)
+if (name) sqlUpdate.set('rct_name',name)
+if (type) sqlUpdate.set('rct_type',type)
+
+sqlUpdate=sqlUpdate.toSql()
+
+try{
+    db.query(sqlUpdate)
+}
+catch(e){
+    write('res','err')
+    write('msg', 'Sql error');
+    write('err',e)
+    exit();
+}
+
+write('res','ok')
+
+","META":{"language":"JavaScript"}}

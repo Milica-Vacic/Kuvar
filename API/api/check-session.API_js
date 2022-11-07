@@ -1,0 +1,34 @@
+{"GET":"let id = session('id')
+if (!id) {
+        write('res', 'err')
+        write('msg', 'Not logged in')
+        exit()
+    }
+let link='http://108m122.e2.mars-hosting.com/api/images/'
+let sqlGetUser = `SELECT usr_username, usr_id, usr_fullname, usr_level, usr_banned, usr_email, CONCAT('${link}',img_id) AS img_link,
+( SELECT CONCAT('[',GROUP_CONCAT(ing_id),']') FROM alergies WHERE usr_id=${id}) AS allergies,
+( SELECT CONCAT('[',GROUP_CONCAT(rct_id),']') FROM preferences WHERE usr_id=${id}) AS preferences
+FROM users WHERE usr_id=? `
+let res = db.query(sqlGetUser,id)
+
+if (res.rows===0) {
+    write('res','err')
+    write('msg', 'User data not found');
+    exit();
+}
+let user = res[0]
+
+let date = new Date()
+if(Date.parse(user.usr_banned)>date){
+    write('res','err')
+    write('msg', 'User banned')
+    session.close()
+    exit()
+}
+
+
+
+user.allergies = JSON.parse(user.allergies)
+user.preferences = JSON.parse(user.preferences)
+write('user',user)
+write('res','ok')","META":{"language":"JavaScript"}}

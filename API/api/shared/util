@@ -1,0 +1,82 @@
+shared.util = {
+    requiredParam: (name) => {
+        write('res', 'err')
+        write('msg',`Missing parameter ${name}`)
+        exit()
+    },
+    userCheck: function (id){
+        if (!id) {
+            write('res', 'err')
+            write('msg', 'Not logged in')
+            exit()
+        }
+
+        let sqlGetUser = 'SELECT * FROM users WHERE usr_id=?'
+        let res = db.query(sqlGetUser,id)
+
+        if (res.rows===0) {
+            write('res','err')
+            write('msg', 'User not found')
+            exit()
+        }
+    },
+    adminCheck: function (id){
+        if (!id) {
+            write('res', 'err')
+            write('msg', 'Not logged in')
+            exit()
+        }
+
+        let sqlGetUser = 'SELECT * FROM users WHERE usr_id=?'
+        let res = db.query(sqlGetUser,id)
+
+        if (res.rows===0) {
+            write('res','err')
+            write('msg', 'User not found')
+            exit()
+        }
+
+        if (res[0].usr_level>1)
+        {
+            write('res','err')
+            write('msg', 'User not admin')
+            exit()
+        }
+    },
+    allNull: function(arr){
+        let stop=true
+        for (let item of arr){
+            if (item!==null) stop=false
+        }
+        if (stop){
+            write('res','ok')
+            write('msg','All parameters empty')
+            exit()
+        }
+    },
+    allNullChk: function(arr){
+        let stop=true
+        for (let item of arr){
+            if (item!==null) stop=false
+        }
+        return stop
+    },
+    findRecipe: function (recId){
+        let res
+        let recCheck = db.select('rec_id').from('recipes').where('rec_id',recId).toSql()
+        try{
+        res=db.query(recCheck)
+        }
+        catch(e){
+            write('res','err')
+            write('msg','SQL error')
+            write('err',e)
+            exit()
+        }
+        if (res.rows===0){
+            write('res','err')
+            write('msg','Recipe not found')
+            exit()
+        }
+    }
+}

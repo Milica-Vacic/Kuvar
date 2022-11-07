@@ -1,0 +1,73 @@
+{"GET":"let id=param('id')
+
+let qbGetRep = db.select(`rep.rep_id, rep_msg, c.com_id,r.rec_id, rep.usr_id AS reportAuthorID, u.usr_fullname AS reportAuthor, 
+com.usr_id AS commentAuthorID, uu.usr_fullname AS commentAuthor, com_content`).from('reports rep')
+.leftJoin('reports_comments c','c.rep_id=rep.rep_id')
+.leftJoin('reports_recipes r','r.rep_id=rep.rep_id')
+.leftJoin('users u','rep.usr_id = u.usr_id')
+.leftJoin('comments com','c.com_id = com.com_id')
+.leftJoin('users uu','com.usr_id = uu.usr_id').where('rep.rep_id',id)
+
+
+let res = db.query(qbGetRep.toSql())
+
+if (res.rows===0){
+    write('res','err')
+    write('msg','Report not found')
+    exit()
+}
+
+write('res','ok')
+write('data',res)","DELETE":"let userId = session('id')
+util.adminCheck
+let id=param('id')
+
+let qbGetRep = db.select(`rep.*,c.com_id,r.rec_id`).from('reports rep')
+.leftJoin('reports_comments c','c.rep_id=rep.rep_id')
+.leftJoin('reports_recipes r','r.rep_id=rep.rep_id').where('rep.rep_id',id)
+
+
+let res = db.query(qbGetRep.toSql())
+
+if (res.rows===0){
+    write('res','err')
+    write('msg','Report not found')
+    exit()
+}
+
+if (res[0].com_id!==null){
+    let sqlDel = db.delete('reports_comments').where('rep_id',id).toSql()
+    try{
+        db.query(sqlDel)
+    }
+    catch(e){
+    write('res','err')
+    write('msg','SQL error')
+    exit()
+    }
+}
+
+
+if (res[0].rec_id!==null){
+    let sqlDel = db.delete('reports_recipes').where('rep_id',id).toSql()
+    try{
+        db.query(sqlDel)
+    }
+    catch(e){
+    write('res','err')
+    write('msg','SQL error')
+    exit()
+    }
+}
+
+let sqlDel = db.delete('reports').where('rep_id',id).toSql()
+try{
+    db.query(sqlDel)
+}
+catch(e){
+write('res','err')
+write('msg','SQL error')
+exit()
+}
+write('res','ok')
+","META":{"language":"JavaScript"}}

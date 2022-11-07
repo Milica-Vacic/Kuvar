@@ -1,0 +1,35 @@
+{"GET":"let id = session('id')
+util.userCheck(id)
+
+let sqlGet = db.select(`*`).from('alergies').where('usr_id',id).toSql()
+let res = db.query(sqlGet)
+write('res', 'ok')
+write('data', res)","POST":"let id = session('id')
+util.userCheck(id)
+let ings = param('ingredients',util.requiredParam) //niz id-eva
+ings=JSON.parse(ings)
+
+let sqlDel = db.delete('alergies').where('usr_id',id).toSql()
+try{
+    db.query(sqlDel)
+}
+catch(e){
+write('res', 'err')
+write('msg', 'SQL error')
+write('err', e);
+exit()
+}
+
+for (let ing of ings){
+let sqlIns = db.insert('alergies').set('usr_id',id).set('ing_id',ing).toSql()
+try{
+    db.query(sqlIns)
+}
+catch(e){
+write('res', 'err')
+write('msg', 'SQL error')
+write('err', e);
+exit()
+}
+}
+write('res', 'ok')","META":{"language":"JavaScript"}}

@@ -1,0 +1,29 @@
+{"GET":"let img_id = param('id',null);
+if (img_id===null) {
+write('res','err');
+write('msg','Missing id parameter');
+exit();
+}
+let q = 'SELECT img_data FROM images WHERE img_id=?'
+let res
+try {
+    res = db.query(q,img_id)
+}
+catch(e){
+write('res', 'err');
+write('msg', 'SQL error')
+exit();
+}
+
+if (res.rows===0) {
+write('res', 'err');
+write('msg', 'Image not found')
+exit();
+}
+
+let image=res[0]
+let mime = 'image'
+
+response.setContentType(mime);
+response.setCache('1Y')
+write(image.img_data);","META":{"language":"JavaScript"}}

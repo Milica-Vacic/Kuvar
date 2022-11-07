@@ -1,0 +1,53 @@
+{"GET":"let link='http://108m122.e2.mars-hosting.com/api/images/'
+
+let qbGetCom = db.select(`com_id, com_content, comments.usr_id, rec_id, usr_fullname,CONCAT('${link}',img_id) AS img_link `).from('comments')
+.innerJoin('users','comments.usr_id = users.usr_id')
+
+let recId=param('rec_id',null)
+
+if (recId!==null){
+    util.findRecipe(recId)
+    qbGetCom.where('rec_id',recId)
+
+}
+
+let res = db.query(qbGetCom.toSql())
+
+if (res.rows===0){
+    write('res','err')
+    write('msg','No comments found')
+    exit()
+}
+
+write('res','ok')
+write('data',res)
+","POST":"let userId=session('id')
+util.userCheck(userId)
+let recId=param('rec_id',util.requiredParam)
+let msg=param('msg',util.requiredParam)
+
+if (msg===''){
+    write('res','err')
+    write('msg','Comment cannot be empty')
+    exit()
+}
+
+let res
+util.findRecipe(recId)
+
+let sqlInsert=db.insert('comments').set('com_content',msg).set('usr_id',userId).set('rec_id',recId).toSql()
+try{
+db.query(sqlInsert)
+}
+catch(e){
+    write('res','err')
+    write('msg','SQL error')
+    write('err',e)
+    exit()
+}
+
+    write('res','ok')
+
+
+
+","META":{"language":"JavaScript"}}

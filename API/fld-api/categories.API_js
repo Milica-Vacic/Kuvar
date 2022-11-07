@@ -1,0 +1,150 @@
+{"GET":"let cat_name = param('cat_name',null) //OPCIJE: ing-type, meal-type, course, diet, country
+let ing_id = param('ing_id',null)
+let cat_ids=param('cat_ids',null)
+cat_ids=JSON.parse(cat_ids)
+
+let res
+
+if (cat_ids!==null){
+    if (!Number.isInteger(parseInt(cat_ids))){
+        write('res', 'err')
+        write('msg', 'Invalid id')
+        exit()
+    }
+    let catSql = db.select(`rct_name,rct_id, rct_type`).from('recipe_categories').where('rct_id',cat_ids).toSql()
+    try{
+    res=db.query(catSql)
+    }
+    catch(e){
+    write('res','err')
+    write('msg', 'SQL error')
+    exit()
+    }
+    write('res','ok')
+    write('data',res)
+    exit();
+}
+
+if (ing_id!==null){
+    if (!Number.isInteger(parseInt(ing_id))){
+        write('res', 'err')
+        write('msg', 'Invalid id')
+        exit()
+    }
+    let catSql = db.select(`itp_name`).from('ingredient_types').where('itp_id',ing_id).toSql()
+    try{
+    res=db.query(catSql)
+    }
+    catch(e){
+    write('res','err')
+    write('msg', 'SQL error')
+    exit()
+    }
+    write('res','ok')
+    write('data',res)
+    exit();
+}
+
+
+if (cat_name==='ing-type'){
+    let ingSql = db.select(`itp_name,itp_id`).from('ingredient_types').toSql()
+    try{
+    res=db.query(ingSql)
+    }
+    catch(e){
+    write('res','err')
+    write('msg', 'SQL error')
+    exit()
+    }
+    write('res','ok')
+    write('data',res)
+    exit();
+}
+
+if (cat_name!==null){
+    let catSql = db.select(`rct_name,rct_id,rct_type`).from('recipe_categories').where('rct_type',cat_name).toSql()
+    try{
+    res=db.query(catSql)
+    }
+    catch(e){
+    write('res','err')
+    write('msg', 'SQL error')
+    exit()
+    }
+    if (res.rows===0){
+    write('res','err')
+    write('msg', 'Category not found')
+    exit()
+    }
+    write('res','ok')
+    write('data',res)
+    exit()
+}
+
+write('res','err')
+write('msg', 'No parameters passed')
+","POST":"let userId = session('id')
+util.adminCheck(userId)
+
+let name=param('name',util.requiredParam)
+let type=param('type',util.requiredParam)
+
+if (name===\"\"){
+    write('res','err')
+    write('msg', 'Name cannot be empty');
+    exit(); 
+}
+
+
+if (type===\"ingredient-type\"){
+    let sqlNameCheck = 'SELECT itp_id FROM ingredient_types WHERE itp_name=?'
+    let res = db.query(sqlNameCheck,name)
+
+    if (res.rows>0) {
+        write('res','err')
+        write('msg', 'Ingredient type already exists');
+        exit();
+    }
+
+
+    let sqlIns = db.insert('ingredient_types').set('itp_name',name).toSql()
+    try{
+        db.query(sqlIns)
+    }
+    catch(e){
+        write('res','err')
+        write('msg', 'Sql error');
+        write('err',e)
+        exit();
+    }
+
+    write('res','ok')
+    exit();
+
+}
+
+
+
+let sqlNameCheck = 'SELECT rct_id FROM recipe_categories WHERE rct_name=?'
+let res = db.query(sqlNameCheck,name)
+
+if (res.rows>0) {
+    write('res','err')
+    write('msg', 'Category already exists');
+    exit();
+}
+
+
+let sqlIns = db.insert('recipe_categories').set('rct_name',name).set('rct_type',type).toSql()
+try{
+    db.query(sqlIns)
+}
+catch(e){
+    write('res','err')
+    write('msg', 'Sql error');
+    write('err',e)
+    exit();
+}
+
+write('res','ok')
+","META":{"language":"JavaScript"}}

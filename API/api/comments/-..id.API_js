@@ -1,0 +1,63 @@
+{"GET":"let id=param('id')
+
+let qbGetCom = db.select('*').from('comments').where('com_id',id)
+let res = db.query(qbGetCom.toSql())
+
+if (res.rows===0){
+    write('res','err')
+    write('msg','Comment not found')
+    exit()
+}
+
+write('res','ok')
+write('data',res)
+","DELETE":"let userId=session('id')
+let id=param('id')
+
+let qbGetCom = db.select('*').from('comments').where('com_id',id)
+let res = db.query(qbGetCom.toSql())
+
+if (res.rows===0){
+    write('res','err')
+    write('msg','Comment not found')
+    exit()
+}
+
+if (res[0].usr_id!==userId){
+    util.adminCheck(userId)
+}
+
+let qbGetRep = db.select(`c.com_id, rep.rep_id`).from('reports rep')
+.innerJoin('reports_comments c','c.rep_id=rep.rep_id')
+.where('c.com_id',id)
+
+res = db.query(qbGetRep.toSql())
+
+for (let row of res){
+  let sqlDelRC = db.delete('reports_comments').where('com_id',row.com_id).toSql()
+  let sqlDelR = db.delete('reports').where('rep_id',row.rep_id).toSql()
+  try{
+    db.query(sqlDelRC)
+    db.query(sqlDelR)
+  }
+  catch(e){
+    write('res','err')
+    write('msg','SQL error')
+    write('err', e);
+    exit() 
+  }
+}
+
+let sqlDel = db.delete('comments').where('com_id',id).toSql()
+try{
+    db.query(sqlDel)
+  }
+  catch(e){
+    write('res','err')
+    write('msg','SQL error')
+    write('err', e);
+    exit() 
+  }
+write('res','ok')
+
+","META":{"language":"JavaScript"}}

@@ -1,0 +1,399 @@
+{"GET":"let allergies=param('allergies',null) //niz id-eva
+let cat_id = param('cat_id',null) //niz id-eva
+let usr_id = param ('usr_id',null)
+let usr_name = param ('usr_name',null)
+let ing_type = param('ing_type',null)
+let rec_name = param('rec_name',null)
+let ingredients = param('ingredients',null) //niz id-eva
+let sort = param('sort',null) // string 'new', 'popular' ili 'trending'
+let link ='http://108m122.e2.mars-hosting.com/api/images/'
+let limit=param('limit',null)
+let limitOffset=param('limitOffset', 0)
+cat_id=JSON.parse(cat_id)
+allergies=JSON.parse(allergies)
+ingredients=JSON.parse(ingredients)
+
+let recCount = db.select(\"COUNT(rec_id) AS recCount\").from(\"recipes\").exec()
+let strSub = (ingredients!==null?`count(distinct ri.ing_id)-${ingredients.length}`:'null')
+
+let qb=db.select(`r.*, concat('[',group_concat(DISTINCT '\"','${link}',ir.img_id,'\"' ORDER BY ir.img_id ASC),']') as img_links, avg(rat_value) as rating,
+concat('[',group_concat(DISTINCT ir.img_id),']') as img_ids,
+u.usr_fullname,
+count(distinct ri.ing_id) as ing_num,
+${strSub} as ing_missing,
+(SELECT avg(rat_value)*count(rat_id) FROM ratings rat
+    WHERE (rec_id=r.rec_id) AND (DATEDIFF(now(),rat_input_time)<15) AND ( rat_value>=4 )) as trend`)
+
+.from('recipes r')
+.leftJoin('images_recipes ir','r.rec_id=ir.rec_id')
+.leftJoin('ratings rat', 'rat.rec_id=r.rec_id')
+.innerJoin('recipes_ingredients ri','ri.rec_id=r.rec_id')
+.innerJoin('users u','u.usr_id=r.usr_id')
+.groupBy('rec_id')
+
+
+
+if (cat_id!==null) {
+    let sqlIng = db.select('rct_id').from('recipe_categories').where('rct_id',cat_id).toSql()
+    qb.where(`r.rec_id in (select distinct rec_id from recipe_category_recipes ri1 where not exists
+    (select rct_id from recipe_categories list where rct_id in (${sqlIng}) and not exists(
+    select rec_id from recipe_category_recipes ri2 where (ri1.rec_id=ri2.rec_id) and (ri2.rct_id=list.rct_id))))`)
+}
+if (usr_id!==null){
+    qb.where('r.usr_id',usr_id)
+}
+if (usr_name!==null){
+    qb.innerJoin('users u','u.usr_id=r.usr_id').where(`usr_fullname LIKE CONCAT('${usr_name}', '%')`)
+}
+if (ing_type!==null){
+    qb.where('itp_id',ing_type)
+}
+if (rec_name!==null){
+    qb.where(`rec_name LIKE CONCAT('%','${rec_name}', '%')`)
+}
+
+if (allergies!==null){
+    let sqlIng = db.select('ing_id').from('ingredients i').where('ing_id',allergies).toSql()
+    qb.where(`r.rec_id not in (select distinct ri.rec_id from recipes_ingredients ri where ri.ing_id in (${sqlIng}))`)
+}
+
+if (ingredients!==null){  //AKO UNET POGRESAN ID ZA SAS SAMO IGNORISE TAJ SASTOJAK!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    let sqlIng = db.select('ing_id').from('ingredients i').where('ing_id',ingredients).toSql()
+    qb.where(`r.rec_id in (select distinct rec_id from recipes_ingredients ri1 where not exists
+    (select ing_id from ingredients list where ing_id in (${sqlIng}) and not exists(
+    select rec_id from recipes_ingredients ri2 where (ri1.rec_id=ri2.rec_id) and (ri2.ing_id=list.ing_id))))`)
+    .orderBy(`ing_missing`)
+    write(ingredients.length)
+    // let condition = db.condition('rec_id', 5)
+    // condition.and('rec_id', '!=', 7)
+    // condition.or('rec_id', 17)
+    // qb.where(condition)
+
+}
+
+if (sort==='popular'){
+    qb.orderBy('rating DESC')
+}
+
+if (sort==='new'){
+    qb.orderBy('rec_input_time DESC')
+}
+
+if (sort==='trending'){
+    qb.orderBy('trend DESC')
+}
+
+let sql = qb.toSql()
+if (limit!==null){
+    sql+=` LIMIT ${limitOffset}, ${limit}`
+}
+let res
+try{
+    res=db.query(sql)
+}
+catch(e)
+{
+write('res', 'err')
+write('msg', 'SQL error')
+write('err', e)
+exit()
+}
+if (res.rows===0){
+write('res', 'err')
+write('msg', 'No recipes found')
+exit()
+}
+
+
+for (let row of res) {
+    row.img_links = JSON.parse(row.img_links)
+    row.img_ids = JSON.parse(row.img_ids)
+}
+
+write('res', 'ok')
+write('recCount', recCount)
+write('recipes', res)","POST":"let id = session('id')
+util.userCheck(id)
+
+let name = param('name',util.requiredParam)
+let time = param('time',util.requiredParam)
+let ing_type = param ('ing_type',util.requiredParam)
+let imgs = param('imgs',null)
+let meal_type = param('meal_type',util.requiredParam)
+let course = param('course',util.requiredParam)
+let diets = param ('diets',null) //niz stringova
+let country = param ('country',null)
+let steps=param('steps',util.requiredParam) //niz objekata sa description i number
+let ingredients = param('ingredients',util.requiredParam) //niz objekata sa name, amount i unit
+// meal_type = JSON.parse(meal_type)
+// course = JSON.parse(course)
+ingredients = JSON.parse(ingredients)
+steps = JSON.parse(steps)
+diets = JSON.parse(diets)
+
+
+if (name==='') {
+    write('res','err')
+    write('msg', 'Name cannot be empty')
+    exit()
+}
+if (time==='') {
+    write('res','err')
+    write('msg', 'Time cannot be empty')
+    exit()
+}
+if (steps.length===0) {
+    write('res','err')
+    write('msg', 'Steps cannot be empty')
+    exit()
+}
+if (ingredients.length===0) {
+    write('res','err')
+    write('msg', 'Ingredients cannot be empty')
+    exit()
+}
+let res
+let sqlNameCheck = 'SELECT * FROM recipes WHERE rec_name=?'
+res = db.query(sqlNameCheck,name)
+
+if (res.rows>0) {
+    write('res','err')
+    write('msg', 'Recipe already exists');
+    exit();
+}
+
+for (let i=0;i<ingredients.length;i++){
+    let qbIng = db.select(`ing_id`).from('ingredients').where('ing_name',ingredients[i].name)
+    let ing_id
+    try{
+        ing_id=db.query(qbIng.toSql())
+    }
+    catch(e){
+        write('res', 'err')
+        write('msg', 'SQL error1')
+        write('err', e)
+        exit();
+    }
+    if (ing_id.rows===0){
+        write('res', 'err')
+        write('msg', 'Ingredient not found')
+        exit();
+    }
+}
+
+let qbIngType = db.select(`itp_id`).from('ingredient_types').where('itp_name',ing_type)
+let ing_type_id
+try{
+    ing_type_id = db.query(qbIngType.toSql())[0].itp_id
+}
+catch(e){
+    write('res', 'err');
+    write('msg', 'SQL error2')
+    write('err', e);
+    exit();
+}
+
+
+let date =new Date()
+
+let qb = db.insert('recipes').set('rec_name',name).set('rec_preptime',time).set('usr_id',id).set('itp_id',ing_type_id).set('rec_input_time',date)
+
+let img_ids=[]
+write('slika', imgs.length)
+write('slika1', imgs)
+if (imgs!==null){
+    if(imgs.length>0){
+        let sqlAdd='INSERT INTO images (img_data) VALUES (?)'
+        for(let i=0;i<imgs.length;i++){
+            if (imgs[i].size>400000){
+                write('res', 'err');
+                write('msg', 'Image too big')
+                exit();
+            }
+            try{
+                img_ids.push(db.query(sqlAdd,imgs[i].data)[0].id)
+            }
+            catch(e){
+                write('res', 'err');
+                write('msg', 'SQL error3')
+                write('err', e);
+                exit();
+            }
+        } 
+    }else{
+        if (imgs.size>400000){
+                write('res', 'err');
+                write('msg', 'Image too big')
+                exit();
+            }
+            try{
+                let sqlAdd='INSERT INTO images (img_data) VALUES (?)'
+                img_ids.push(db.query(sqlAdd,imgs.data)[0].id)
+            }
+            catch(e){
+                write('res', 'err');
+                write('msg', 'SQL error3')
+                write('err', e);
+                exit();
+            }
+    }
+}
+
+
+let qbCourse = db.select(`rct_id`).from('recipe_categories').where('rct_name',course)
+let course_id
+try{
+    course_id = db.query(qbCourse.toSql())[0].rct_id
+}
+catch(e){
+    write('res', 'err');
+    write('msg', 'SQL error4')
+    write('err', e);
+    exit();
+}
+
+
+let qbMType = db.select(`rct_id`).from('recipe_categories').where('rct_name',meal_type)
+let meal_type_id
+try{
+    meal_type_id = db.query(qbMType.toSql())[0].rct_id
+}
+catch(e){
+    write('res', 'err');
+    write('msg', 'SQL error5')
+    write('err', e);
+    exit();
+}
+
+
+let diet_ids=[]
+if (diets!=null && diets.length>0){
+        let qbDiet = db.select(`rct_id`).from('recipe_categories').where('rct_name',diets)
+        try{
+           diet_ids=db.query(qbDiet.toSql())
+        }
+        catch(e){
+            write('res', 'err')
+            write('msg', 'SQL error6')
+            write('err', e)
+            exit();
+        }
+}
+
+let country_id=null
+if (country!==null){
+    let qbCountry = db.select(`rct_id`).from('recipe_categories').where('rct_name',country)
+
+    try{
+        country_id = db.query(qbCountry.toSql())[0].rct_id
+    }
+    catch(e){
+        write('res', 'err');
+        write('msg', 'SQL error, county not found')
+        write('err', e);
+        exit();
+    }
+}
+
+
+
+
+let sql = qb.toSql()
+let rec_id
+try{
+    rec_id=db.query(sql)[0].id
+}
+catch(e)
+{
+write('res', 'err')
+write('msg', 'SQL error7')
+write('err', e)
+exit()
+}
+
+
+let sqlCat = 'INSERT INTO recipe_category_recipes (rct_id,rec_id) VALUES (?,?)'
+try{
+    db.query(sqlCat,course_id,rec_id)
+    db.query(sqlCat,meal_type_id,rec_id)
+    if (country_id!==null) db.query(sqlCat,country_id,rec_id)
+    for (let row of diet_ids) {
+    db.query(sqlCat,row.rct_id,rec_id)
+    }
+}
+catch(e){
+    write('res', 'err');
+    write('msg', 'SQL error8')
+    write('err', e);
+    exit();
+}
+
+
+
+if (img_ids.length>0){
+    let sqlLink='INSERT INTO images_recipes (img_id,rec_id) VALUES (?,?)'
+    for (let i=0;i<img_ids.length;i++){
+        try{
+            db.query(sqlLink,img_ids[i],rec_id)
+        }
+        catch(e){
+            write('res', 'err')
+            write('msg', 'SQL error9')
+            write('err', e)
+            exit();
+        }
+    }
+
+
+}
+
+for(let i=0;i<steps.length;i++){
+    let sqlSteps=db.insert('steps').set('ste_description',steps[i].description).set('ste_number',steps[i].number).set('rec_id',rec_id).toSql()
+    try{
+        db.query(sqlSteps)
+    }
+    catch(e){
+        write('res', 'err');
+        write('msg', 'SQL error10')
+        write('err', e);
+        exit();
+    }
+}
+
+
+for (let i=0;i<ingredients.length;i++){
+    let qbIng = db.select(`ing_id`).from('ingredients').where('ing_name',ingredients[i].name)
+    let qbUni = db.select(`uni_id`).from('units').where('uni_name',ingredients[i].unit)
+    let ing_id
+    let uni_id
+    try{
+        ing_id=db.query(qbIng.toSql())[0].ing_id
+        uni_id=db.query(qbUni.toSql())[0].uni_id
+    }
+    catch(e){
+        write('res', 'err')
+        write('msg', 'SQL error11')
+        write('err', e)
+        exit();
+    }
+
+    let sqlIng=db.insert('recipes_ingredients').set('rec_id',rec_id).set('ing_id',ing_id)
+    .set('rci_amount',ingredients[i].amount).set('uni_id',uni_id).toSql()
+        try{
+            db.query(sqlIng)
+        }
+        catch(e){
+            write('res', 'err')
+            write('msg', 'SQL error12')
+            write('err', e)
+            exit();
+        }
+}
+
+
+write('res', 'ok')
+
+
+
+
+","META":{"language":"JavaScript"}}

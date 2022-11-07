@@ -1,0 +1,198 @@
+{"GET":"let filter = param ('filter',null)
+
+let link='http://108m122.e2.mars-hosting.com/api/images/'
+let sqlGetUser = `SELECT usr_username, usr_id, usr_fullname, usr_level, usr_banned, usr_email, CONCAT('${link}',img_id) AS img_link
+FROM users WHERE usr_fullname LIKE CONCAT('${filter}', '%')`
+let users=db.query(sqlGetUser)
+
+
+write('users',users)
+write('result','ok')
+
+","POST":"let uname = param('username',null)
+let fname=param('fullname',null)
+let pass = param('pass',null)
+let pass2 = param('pass2',null)
+let mail = param('email',null)
+
+if (!uname || !mail || !pass || !pass2){
+    write('res','err')
+    write('msg', 'Missing input');
+    exit();
+}
+
+let sqlNameCheck = 'SELECT * FROM users WHERE usr_username=?'
+let res = db.query(sqlNameCheck,uname)
+
+if (res.rows>0) {
+    write('res','err')
+    write('msg', 'Username already taken');
+    exit();
+}
+
+let sqlMailCheck = 'SELECT * FROM users WHERE usr_email=?'
+res = db.query(sqlMailCheck,mail)
+
+if (res.rows>0) {
+    write('res','err')
+    write('msg', 'Email already in use');
+    exit();
+}
+
+
+if (pass!==pass2) {
+    write('res','err')
+    write('msg', 'Passwords do not match');
+    exit();
+}
+
+let params = {
+    uname:uname,
+    fname:fname,
+    pass:bcrypt(pass),
+    mail:mail
+}
+
+let sqlInsUser = 'INSERT INTO users (usr_username,usr_fullname,usr_password,usr_email) VALUES (:uname,:fname,:pass,:mail)'
+
+try {
+    db.query(sqlInsUser,params)
+    write('res','ok')
+}
+catch (e) {
+    write('res','err')
+    write('msg','SQL error')
+    write('sql',sqlInsUser)
+}","PATCH":"let id = session('id')
+util.userCheck(id)
+
+let sqlGetUser = 'SELECT * FROM users WHERE usr_id=?'
+let res = db.query(sqlGetUser,id)
+let img_id=res[0].img_id
+
+let uname=param('username',null)
+let fname=param('fullname',null)
+let mail=param('email',null)
+let pass=param('pass',null)
+let pass2=param('pass2',null)
+let img =param('img',null)
+
+if (pass!==pass2) {
+    write('res','err')
+    write('msg', 'Passwords do not match');
+    exit();
+}
+
+if (uname==null && fname==null && mail==null && pass==null && img==null){
+    write('res','ok')
+    exit()
+}
+
+
+if (uname==='') {
+    write('res','err')
+    write('msg', 'Username cannot be empty');
+    exit();
+}
+
+if (uname!=null){
+    let sqlNameCheck = 'SELECT * FROM users WHERE usr_username=?'
+    res = db.query(sqlNameCheck,uname)
+
+    if (res.rows>0 && res[0].usr_id!==id) {
+        write('res','err')
+        write('msg', 'Username already taken');
+        exit();
+    }
+}
+
+if (fname==='') {
+    write('res','err')
+    write('msg', 'Full name cannot be empty');
+    exit();
+}
+
+if (mail==='') {
+    write('res','err')
+    write('msg', 'Email cannot be empty');
+    exit();
+}
+
+let sqlMailCheck = 'SELECT * FROM users WHERE usr_email=?'
+res = db.query(sqlMailCheck,mail)
+
+if (res.rows>0 && res[0].usr_id!==id) {
+    write('res','err')
+    write('msg', 'Email already in use');
+    exit();
+}
+
+let sqlUpdate ='UPDATE users SET img_id=? WHERE usr_id=?'
+if (img!==null){
+
+        if (img.size>400000){
+            write('res', 'err');
+            write('msg', 'Image too big')
+            exit();
+        }
+        if (img_id!==null){
+            let sqlDelete='DELETE FROM images WHERE img_id=?'
+        try{
+            db.query(sqlUpdate,null,id)
+            db.query(sqlDelete,img_id)
+        }
+        catch(e){
+            write('res', 'err');
+            write(e)
+            write('msg', 'SQL error1')
+            exit();
+        }
+        }
+    let sqlAdd='INSERT INTO images (img_data) VALUES (?)'
+
+    try{
+        img_id=db.query(sqlAdd,img.data)[0].id;
+        db.query(sqlUpdate,img_id,id);
+    }
+    catch(e){
+        write('res', 'err');
+        write('msg', 'SQL error2')
+        exit();
+    }
+}
+
+
+let params ={
+    uname:uname,
+    fname:fname,
+    mail:mail,
+    pass:bcrypt(pass),
+    id:id,
+    img_id:img_id
+}
+
+let sqlChange = 'UPDATE users SET '
+
+if (uname!=null) sqlChange+='usr_username=:uname, '
+if (fname!=null) sqlChange+='usr_fullname=:fname, '
+if (pass!=null && pass!=='') sqlChange+='usr_password=:pass, '
+if (mail!=null) sqlChange+='usr_email=:mail, '
+if (img!==null) sqlChange+='img_id=:img_id, '
+sqlChange=sqlChange.substr(0,sqlChange.length-2)
+sqlChange+=' WHERE usr_id=:id;'
+
+try{
+    res = db.query(sqlChange,params)
+}
+catch(e){
+    write('res','err')
+    write('msg', 'SQL error');
+    write('sql',sqlChange)
+    write(e)
+    exit();
+}
+
+write('user', res[0]);
+write('res','ok')
+
+","META":{"language":"JavaScript"}}

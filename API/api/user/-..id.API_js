@@ -1,0 +1,68 @@
+{"GET":"let userId = param('id');
+if (!Number.isInteger(parseInt(userId))){
+write('res', 'err')
+write('msg', 'Invalid id')
+exit()
+}
+
+let link='http://108m122.e2.mars-hosting.com/api/images/'
+let sqlGetUser = `SELECT usr_username, usr_id, usr_fullname, usr_level, usr_banned, usr_email, CONCAT('${link}',img_id) AS img_link,
+( SELECT CONCAT('[',GROUP_CONCAT(ing_id),']') FROM alergies WHERE usr_id=${userId}) AS allergies,
+( SELECT CONCAT('[',GROUP_CONCAT(rct_id),']') FROM preferences WHERE usr_id=${userId}) AS preferences
+FROM users WHERE usr_id=? `
+let res = db.query(sqlGetUser,userId)
+
+if (res.rows===0) {
+    write('res','err')
+    write('msg', 'User data not found');
+    exit();
+}
+
+let user = res[0]
+user.allergies = JSON.parse(user.allergies)
+user.preferences = JSON.parse(user.preferences)
+write('user',user)
+write('result','ok')","PATCH":"let userId = session('id')
+
+util.adminCheck(userId)
+
+let id = param('id',null)
+let level=param('level',null)
+let banned=param('banned',null)
+
+if (level==null && banned==null){
+    write('res','ok')
+    exit();
+}
+let params ={
+    level:level,
+    banned:banned==\"unban\"?null:banned,
+    id:id
+}
+
+    let sqlGetUser = 'SELECT * FROM users WHERE usr_id=:id'
+    let res = db.query(sqlGetUser,params)
+
+    if (res.rows===0) {
+        write('res','err')
+        write('msg', 'User not found')
+        exit()
+    }
+
+    let sqlUpdate=' UPDATE users SET '
+    if (level!=null) sqlUpdate+='usr_level=:level, '
+    if (banned!=null) sqlUpdate+='usr_banned=:banned, '
+    sqlUpdate=sqlUpdate.substr(0,sqlUpdate.length-2)
+    sqlUpdate+=' WHERE usr_id=:id;'
+    try{
+    res = db.query(sqlUpdate,params)
+    }
+    catch(e){
+        write('res','err')
+        write('msg', 'SQL error');
+        write('sql',sqlUpdate)
+        write('err',e)
+        exit();
+    }
+    write('user', res[0]);
+    write('res','ok')","META":{"language":"JavaScript"}}

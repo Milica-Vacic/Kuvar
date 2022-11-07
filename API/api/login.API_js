@@ -1,0 +1,45 @@
+{"POST":"let name = param('name')
+let pass = param('pass')
+let params ={
+    name:name
+}
+
+let sqlNameCheck = 'SELECT * FROM users WHERE usr_username=:name OR usr_email=:name'
+let res = db.query(sqlNameCheck,params)
+
+if (res.rows===0) {
+    write('res','err')
+    write('msg', 'Username (email) or password incorrect')
+    exit()
+}
+
+let user = res[0]
+let passCheck = bcrypt(pass,user.usr_password)
+if (!passCheck) {
+    write('res','err')
+    write('msg', 'Username (email) or password incorrect')
+    exit()
+}
+
+let date = new Date()
+if(Date.parse(user.usr_banned)>date){
+    write('res','err')
+    write('msg', 'User banned')
+    exit()
+}
+
+let sid = session()
+session('id', user.usr_id)
+write('sid',sid)
+write('usrId', user.usr_id)
+write('res','ok')","GET":"let userId = session('id');
+
+if (!userId) {
+    write('res','err')
+    write('msg', 'Not logged in');
+    exit();
+}
+session.close();
+write('res','logged out')
+
+","META":{"language":"JavaScript"}}

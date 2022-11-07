@@ -1,0 +1,132 @@
+{"GET":"let id =param('id',null)
+let link = 'http://108m122.e2.mars-hosting.com/api/images/'
+
+let sqlGetIng = `SELECT ing_id, ing_name, ing_calories, ing_g_per_ml, CONCAT('${link}', img_id) AS img_link,
+( SELECT CONCAT('[',GROUP_CONCAT('\"',uni_name,'\"'),']') FROM units
+WHERE uni_type=(SELECT IF ((select ing_g_per_ml from ingredients where ing_id=${id}) IS NULL,'mass',uni_type))) AS units
+FROM ingredients WHERE ing_id=?`
+    let res
+    try{
+        res=db.query(sqlGetIng,id)
+    }
+    catch(e){
+        write('res','err')
+        write('msg', 'SQL error');
+        exit();
+    }
+    if (res.rows===0){
+        write('res','err')
+        write('msg', 'Ingredient not found');
+        exit();
+    }
+    for (let row of res){
+        row.units=JSON.parse(row.units)
+    }
+    write('res','ok')
+    write('data',res)","PATCH":"let userId = session('id')
+let id =param('id',null)
+let name = param('name',null)
+let cal = param('cal',null)
+let density = param('density',null)
+let img = param('img',null)
+
+if (!userId) {
+    write('res', 'err')
+    write('msg', 'Not logged in')
+    exit()
+}
+
+let sqlUserCheck = 'SELECT * FROM users WHERE usr_id=?'
+let res = db.query(sqlUserCheck,userId)
+
+if (res.rows===0) {
+    write('res','err')
+    write('msg', 'User not found');
+    exit();
+}
+
+if (res[0].usr_level>1) {
+    write('res','err')
+    write('msg', 'User not admin');
+    exit();
+}
+
+if (name==='' || cal==='') {
+    write('res','err')
+    write('msg', 'Parameters cannot be empty');
+    exit();
+}
+
+
+let sqlGetIng = 'SELECT * FROM ingredients WHERE ing_id=?'
+    res = db.query(sqlGetIng,id)
+
+if (res.rows===0) {
+    write('res','err')
+    write('msg', 'Ingredient not found')
+    exit()
+}
+
+let img_id=null
+let sqlUpdate ='UPDATE ingredients SET img_id=? WHERE ing_id=?'
+if (img!==null){
+        if (img.size>400000){
+            write('res', 'err');
+            write('msg', 'Image too big')
+            exit();
+        }
+        img_id=res[0].img_id
+        if (img_id!==null){
+            let sqlDelete='DELETE FROM images WHERE img_id=?'
+        try{
+            db.query(sqlUpdate,null,id)
+            db.query(sqlDelete,img_id)
+            }
+        catch(e){
+            write('res', 'err');
+            write(e)
+            write('msg', 'SQL error1')
+            exit();
+            }
+        }
+    let sqlAdd='INSERT INTO images (img_data) VALUES (?)'
+
+    try{
+        img_id=db.query(sqlAdd,img.data)[0].id;
+        db.query(sqlUpdate,img_id,id);
+    }
+    catch(e){
+        write('res', 'err');
+        write('msg', 'SQL error2')
+        write('err',e)
+        exit();
+    }
+}
+
+let params = {
+    name:name,
+    cal:cal,
+    density:density,
+    id:id,
+    img_id:img_id
+}
+
+    let sqlPatch=' UPDATE ingredients SET '
+    if (name!=null) sqlPatch+='ing_name=:name, '
+    if (cal!=null) sqlPatch+='ing_calories=:cal, '
+    if(density!=null) sqlPatch+='ing_g_per_ml=:density, '
+    if (img!==null) sqlPatch+='img_id=:img_id, '
+    sqlPatch=sqlPatch.substr(0,sqlPatch.length-2)
+    sqlPatch+=' WHERE ing_id=:id;'
+    try{
+    res = db.query(sqlPatch,params)
+    }
+    catch(e){
+        write('res','err')
+        write('msg', 'SQL error');
+        write('err',e)
+        write('sql',sqlPatch)
+        exit();
+    }
+    write('user', res[0]);
+    write('res','ok')","META":{"language":"JavaScript"}}

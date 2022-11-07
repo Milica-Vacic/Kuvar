@@ -1,0 +1,35 @@
+{"GET":"let id = session('id')
+util.userCheck(id)
+
+let sqlGet = db.select(`*`).from('preferences').where('usr_id',id).toSql()
+let res = db.query(sqlGet)
+write('res', 'ok')
+write('data', res)","POST":"let id = session('id')
+util.userCheck(id)
+let diets = param('diets',util.requiredParam) //niz id-eva dijeta
+diets=JSON.parse(diets)
+
+let sqlDel = db.delete('preferences').where('usr_id',id).toSql()
+try{
+    db.query(sqlDel)
+}
+catch(e){
+write('res', 'err')
+write('msg', 'SQL error')
+write('err', e);
+exit()
+}
+
+for (let diet of diets){
+let sqlIns = db.insert('preferences').set('usr_id',id).set('rct_id',diet).toSql()
+try{
+    db.query(sqlIns)
+}
+catch(e){
+write('res', 'err')
+write('msg', 'SQL error')
+write('err', e);
+exit()
+}
+}
+write('res', 'ok')","META":{"language":"JavaScript"}}
